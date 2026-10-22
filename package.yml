@@ -1,5 +1,5 @@
 package: cloud.lazycat.app.meelo
-version: 3.13.1
+version: 3.13.1-14
 name: Meelo 音乐库
 description: 属于自己的个人音乐库：扫描本地曲库、读取内嵌标签与封面，支持分区检索与浏览器直接播放
 author: Arthur Jamet
