@@ -1,0 +1,275 @@
+# Meelo 音乐库 —— 懒猫微服运行配置（数据面）
+# 上游 compose（docker-compose.prod.yml）有 8 个服务：nginx 由平台 upstreams 路由替代，
+# 因此这里有 7 个服务，路径前缀剥除使用平台默认行为（disable_trim_location 保持 false），
+# 与上游 nginx `rewrite ^/api(/.*)$ $1 break` 等价。
+application:
+  subdomain: meelo
+
+  # /api/ → server，/scanner/ → scanner，/matcher/ → matcher，其余 → front(Next.js SSR)
+  upstreams:
+    - location: /api/
+      backend: http://server.cloud.lazycat.app.meelo.lzcapp:4000
+    - location: /scanner/
+      backend: http://scanner.cloud.lazycat.app.meelo.lzcapp:8133
+    - location: /matcher/
+      backend: http://matcher.cloud.lazycat.app.meelo.lzcapp:6789
+    - location: /
+      backend: http://front.cloud.lazycat.app.meelo.lzcapp:3000
+
+  health_check:
+    test_url: http://front.cloud.lazycat.app.meelo.lzcapp:3000
+    start_period: 300s
+    timeout: 10s
+
+  injects:
+    # 免密登录：Meelo 前端认 cookie access_token（JWT）。注入脚本在缺少该 cookie 时
+    # 调 /api/auth/login，必要时先用 /api/users 建首个管理员账号，然后写 cookie 并刷新。
+    - id: meelo-autologin
+      'on': browser
+      auth_required: true
+      when:
+        - /*
+      do:
+        - src: file:///lzcapp/pkg/content/lazycat-injects/meelo-autologin.js
+          params:
+            username: admin
+            password: Meelo-Lzc-2026
+
+    # 首页/页面 HTML 走 SSR，若拿到 304 会缺少注入 -> 去掉条件请求头，强制回新页面。
+    - id: meelo-strip-conditional-headers
+      'on': request
+      auth_required: false
+      when:
+        - /*
+      do: |
+        var accept = String(ctx.headers.get("Accept") || "");
+        if (accept.indexOf("text/html") < 0) return;
+        ctx.headers.del("If-None-Match");
+        ctx.headers.del("If-Modified-Since");
+
+services:
+  # ── 前端（Next.js SSR） ─────────────────────────────────────────────
+  # PUBLIC_* 一律不设：上游 api.ts 在 PUBLIC_* 缺失时回落相对路径 /api、/scanner、/matcher，
+  # 正好走同域反代，避免写死部署域名。SSR_* 用服务内网域名直连。
+  front:
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-front:a6d25bd739340755
+    depends_on: [server, scanner]
+    environment:
+      - NODE_ENV=production
+      - SSR_SERVER_URL=http://server.cloud.lazycat.app.meelo.lzcapp:4000
+      - SSR_SCANNER_URL=http://scanner.cloud.lazycat.app.meelo.lzcapp:8133
+      - SSR_MATCHER_URL=http://matcher.cloud.lazycat.app.meelo.lzcapp:6789
+    healthcheck:
+      # 必须写 127.0.0.1：Next 只监听 IPv4，localhost 会解析到 ::1 导致探针误判。
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:3000 >/dev/null 2>&1 || exit 1"]
+      start_period: 180s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── 后端 API（NestJS + Prisma） ────────────────────────────────────
+  # 应用文稿在容器里是 /lzcapp/documents/<部署者 UID>（平台不注入 UID 环境变量，binds 里的 @ 也不解析），
+  # 所以 INTERNAL_DATA_DIR 用文稿根，并在 setup_script 里建稳定别名 /lzcapp/documents/music → <UID> 目录，
+  # 曲库路径就能固定填 music；索引与封面按规范写 appvar，不写文稿目录。
+  server:
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-server:ab3d4b2573fbd68f
+    # 首次安装没有 settings.json，scanner/matcher 会直接退出并反复重启。
+    # 启动前落一份上游样例配置（先写临时文件再 mv，避免并发读到半个文件）。
+    setup_script: |
+      mkdir -p /config
+      if [ ! -s /config/settings.json ]; then
+        cp /lzcapp/pkg/content/meelo/settings.json /config/.settings.json.new
+        mv /config/.settings.json.new /config/settings.json
+      fi
+      # 文稿根下建稳定别名：Meelo 的曲库路径只能相对 INTERNAL_DATA_DIR，用户不该填自己的 UID。
+      if [ ! -e /lzcapp/documents/music ]; then
+        for d in /lzcapp/documents/*/; do
+          if [ -d "$d" ]; then
+            ln -sfn "${d%/}" /lzcapp/documents/music
+            break
+          fi
+        done
+      fi
+    depends_on: [db, meili, mq]
+    # 数据根 = 应用文稿根目录（真实文件在 <UID> 子目录，曲子经上面建的 music 别名进来）。
+    environment:
+      - NODE_ENV=production
+      - INTERNAL_CONFIG_DIR=/config
+      - DATABASE_URL=postgresql://meelo:0d870d9cbd398aaaf54d37ffa24d3b3e@db.cloud.lazycat.app.meelo.lzcapp:5432/meelo?schema=public
+      - MEILI_HOST=http://meili.cloud.lazycat.app.meelo.lzcapp:7700
+      - MEILI_MASTER_KEY=0d496b83a3e983ac783c56931a597ab0
+      - RABBITMQ_URL=amqp://meelo:8b241d289236946f91cfe8fe8403cf10@mq.cloud.lazycat.app.meelo.lzcapp:5672
+      - JWT_SIGNATURE=46986a50d93196081b8fe3d30962c47c
+      - API_KEYS=54d6172afcb4ac98f23993e88ac0d041
+      - TRANSCODER_URL=http://transcoder.cloud.lazycat.app.meelo.lzcapp:7666
+      - ENABLE_USER_REGISTRATION=1
+      - ALLOW_ANONYMOUS=0
+      - TZ=Asia/Shanghai
+      - INTERNAL_DATA_DIR=/lzcapp/documents
+    binds:
+      - /lzcapp/var/meelo/config:/config
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://localhost:4000 >/dev/null 2>&1 || exit 1"]
+      start_period: 240s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── 曲库扫描器（Go） ───────────────────────────────────────────────
+  scanner:
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-scanner:c03479e5845a1b16
+    # 与 server 同一份 config 卷；这里再兜一次底，保证 worker 启动时设置文件一定在。
+    setup_script: |
+      mkdir -p /config
+      if [ ! -s /config/settings.json ]; then
+        cp /lzcapp/pkg/content/meelo/settings.json /config/.settings.json.new
+        mv /config/.settings.json.new /config/settings.json
+      fi
+      # /lzcapp/documents 是每个容器各自的本地目录（只有 <UID> 子目录是同一份 bind），
+      # 所以 music 别名必须各容器自己建，扫描器才能按相对路径 music 找到文件。
+      if [ ! -e /lzcapp/documents/music ]; then
+        for d in /lzcapp/documents/*/; do
+          if [ -d "$d" ]; then
+            ln -sfn "${d%/}" /lzcapp/documents/music
+            break
+          fi
+        done
+      fi
+    depends_on: [server]
+    environment:
+      - API_URL=http://server.cloud.lazycat.app.meelo.lzcapp:4000
+      - API_KEYS=54d6172afcb4ac98f23993e88ac0d041
+      - INTERNAL_CONFIG_DIR=/config
+      - TZ=Asia/Shanghai
+      # 与 server 必须同一路径，否则它按相对路径解析曲库时找不到文件。
+      - INTERNAL_DATA_DIR=/lzcapp/documents
+    binds:
+      - /lzcapp/var/meelo/config:/config
+    # 上游 compose 用 wget 探 8133，扫描器确实监听该端口。
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://localhost:8133 >/dev/null 2>&1 || exit 1"]
+      start_period: 120s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── 元数据匹配器（消费 MQ 消息，补全艺人/专辑） ───────────────────────
+  matcher:
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-matcher:9784b6b6cf335f5f
+    # 与 server 同一份 config 卷，同样兜底设置文件。
+    setup_script: |
+      mkdir -p /config
+      if [ ! -s /config/settings.json ]; then
+        cp /lzcapp/pkg/content/meelo/settings.json /config/.settings.json.new
+        mv /config/.settings.json.new /config/settings.json
+      fi
+      # 读内嵌标签时要按绝对路径打开音频文件，同 server 补 music 别名。
+      if [ ! -e /lzcapp/documents/music ]; then
+        for d in /lzcapp/documents/*/; do
+          if [ -d "$d" ]; then
+            ln -sfn "${d%/}" /lzcapp/documents/music
+            break
+          fi
+        done
+      fi
+    depends_on: [server, mq]
+    environment:
+      - API_URL=http://server.cloud.lazycat.app.meelo.lzcapp:4000
+      - API_KEYS=54d6172afcb4ac98f23993e88ac0d041
+      - INTERNAL_CONFIG_DIR=/config
+      - RABBITMQ_URL=amqp://meelo:8b241d289236946f91cfe8fe8403cf10@mq.cloud.lazycat.app.meelo.lzcapp:5672
+      - TZ=Asia/Shanghai
+    binds:
+      - /lzcapp/var/meelo/config:/config
+    # FastAPI 监听 6789；镜像无 wget/nc，用 python 建一次 TCP 连接当探针。
+    healthcheck:
+      test: [CMD, "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 6789), 3).close()"]
+      start_period: 120s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── 转码服务（上游 kyoo transcoder） ───────────────────────────────
+  # 影像里是完整 Debian（有 bash/ffmpeg），但没有 wget/nc，用 bash 的 /dev/tcp 探端口。
+  transcoder:
+    image: registry.lazycat.cloud/wans/zoriya/kyoo_transcoder:7fa7c89900dc9199
+    # 启动即连库做迁移，库没起来会直接退出（exit 0），必须等 db 健康。
+    depends_on: [db]
+    # 转码要按 server 给的绝对路径读文件；/lzcapp/documents 是容器本地目录，同理补一个 music 别名。
+    setup_script: |
+      if [ ! -e /lzcapp/documents/music ]; then
+        for d in /lzcapp/documents/*/; do
+          if [ -d "$d" ]; then
+            ln -sfn "${d%/}" /lzcapp/documents/music
+            break
+          fi
+        done
+      fi
+    environment:
+      - GOCODER_SAFE_PATH=/lzcapp/documents
+      - PGUSER=meelo
+      - PGPASSWORD=0d870d9cbd398aaaf54d37ffa24d3b3e
+      - PGDATABASE=meelo
+      - PGHOST=db.cloud.lazycat.app.meelo.lzcapp
+      - PGPORT=5432
+      - TZ=Asia/Shanghai
+    binds:
+      - /lzcapp/var/meelo/transcoder-cache:/cache
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/7666'"]
+      start_period: 60s
+      interval: 20s
+      timeout: 10s
+      retries: 6
+
+  # ── 数据库 ─────────────────────────────────────────────────────────
+  db:
+    image: registry.lazycat.cloud/wans/library/postgres:544d804748ca9478
+    environment:
+      - POSTGRES_USER=meelo
+      - POSTGRES_PASSWORD=0d870d9cbd398aaaf54d37ffa24d3b3e
+      - POSTGRES_DB=meelo
+      - TZ=Asia/Shanghai
+    binds:
+      - /lzcapp/var/meelo/db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U meelo -d meelo"]
+      start_period: 60s
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # ── 全文检索 ───────────────────────────────────────────────────────
+  meili:
+    image: registry.lazycat.cloud/wans/getmeili/meilisearch:d025d76e42cbb939
+    environment:
+      - MEILI_ENV=production
+      - MEILI_MASTER_KEY=0d496b83a3e983ac783c56931a597ab0
+      - MEILI_LOG_LEVEL=WARN
+      - MEILI_NO_ANALYTICS=true
+    binds:
+      - /lzcapp/var/meelo/meili:/meili_data
+    healthcheck:
+      test: [CMD, "wget", "--no-verbose", "--spider", "http://127.0.0.1:7700/health"]
+      start_period: 60s
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # ── 消息队列（扫描/匹配任务） ────────────────────────────────────────
+  mq:
+    image: registry.lazycat.cloud/wans/library/rabbitmq:4a24b44d3877617b
+    environment:
+      - RABBITMQ_DEFAULT_USER=meelo
+      - RABBITMQ_DEFAULT_PASS=8b241d289236946f91cfe8fe8403cf10
+      # 平台不分配固定容器 hostname，固定节点名避免 mnesia 目录与节点名不匹配
+      - RABBITMQ_NODENAME=meelo@localhost
+      - TZ=Asia/Shanghai
+    binds:
+      - /lzcapp/var/meelo/mq:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD-SHELL, "rabbitmq-diagnostics -q ping"]
+      start_period: 90s
+      interval: 15s
+      timeout: 15s
+      retries: 10
