@@ -22,18 +22,7 @@ images:
     service: server
     source: ghcr.io/arthi-chaud/meelo-server
     channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+
-stores:
-  official:
-    enabled: true
-    skip_if_version_exists: true
-    create_if_missing: true
-    changelog_locales:
-      - zh
-      - en
-  private:
-    enabled: false
-
+    tag_regex: '^v?\d+\.\d+\.\d+$'
     sort: semver
     delivery:
       mode: lazycat
@@ -43,18 +32,7 @@ stores:
     service: front
     source: ghcr.io/arthi-chaud/meelo-front
     channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+
-stores:
-  official:
-    enabled: true
-    skip_if_version_exists: true
-    create_if_missing: true
-    changelog_locales:
-      - zh
-      - en
-  private:
-    enabled: false
-
+    tag_regex: '^v?\d+\.\d+\.\d+$'
     sort: semver
     delivery:
       mode: lazycat
@@ -64,18 +42,7 @@ stores:
     service: scanner
     source: ghcr.io/arthi-chaud/meelo-scanner
     channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+
-stores:
-  official:
-    enabled: true
-    skip_if_version_exists: true
-    create_if_missing: true
-    changelog_locales:
-      - zh
-      - en
-  private:
-    enabled: false
-
+    tag_regex: '^v?\d+\.\d+\.\d+$'
     sort: semver
     delivery:
       mode: lazycat
@@ -85,18 +52,7 @@ stores:
     service: matcher
     source: ghcr.io/arthi-chaud/meelo-matcher
     channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+
-stores:
-  official:
-    enabled: true
-    skip_if_version_exists: true
-    create_if_missing: true
-    changelog_locales:
-      - zh
-      - en
-  private:
-    enabled: false
-
+    tag_regex: '^v?\d+\.\d+\.\d+$'
     sort: semver
     delivery:
       mode: lazycat
