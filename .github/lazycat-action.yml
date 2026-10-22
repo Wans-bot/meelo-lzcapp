@@ -10,6 +10,10 @@ project:
 update:
   strategy: publish
   allow_downgrade: false
+  # 没有可跟版的上游镜像时用 git：版本号取自 package.yml。
+  # 不写会导致 action 报 CONFIG_INVALID（unsupported version source type ""）。
+  version_source:
+    type: git
 
 build:
   run_buildscript: false
