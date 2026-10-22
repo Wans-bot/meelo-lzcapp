@@ -4,6 +4,7 @@
 # 与上游 nginx `rewrite ^/api(/.*)$ $1 break` 等价。
 application:
   subdomain: meelo
+
   # /api/ → server，/scanner/ → scanner，/matcher/ → matcher，其余 → front(Next.js SSR)
   upstreams:
     - location: /api/
@@ -14,10 +15,12 @@ application:
       backend: http://matcher.cloud.lazycat.app.meelo.lzcapp:6789
     - location: /
       backend: http://front.cloud.lazycat.app.meelo.lzcapp:3000
+
   health_check:
     test_url: http://front.cloud.lazycat.app.meelo.lzcapp:3000
     start_period: 300s
     timeout: 10s
+
   injects:
     # 免密登录：Meelo 前端认 cookie access_token（JWT）。注入脚本在缺少该 cookie 时
     # 调 /api/auth/login，必要时先用 /api/users 建首个管理员账号，然后写 cookie 并刷新。
@@ -31,6 +34,7 @@ application:
           params:
             username: admin
             password: Meelo-Lzc-2026
+
     # 首页/页面 HTML 走 SSR，若拿到 304 会缺少注入 -> 去掉条件请求头，强制回新页面。
     - id: meelo-strip-conditional-headers
       'on': request
@@ -42,13 +46,13 @@ application:
         if (accept.indexOf("text/html") < 0) return;
         ctx.headers.del("If-None-Match");
         ctx.headers.del("If-Modified-Since");
+
 services:
   # ── 前端（Next.js SSR） ─────────────────────────────────────────────
   # PUBLIC_* 一律不设：上游 api.ts 在 PUBLIC_* 缺失时回落相对路径 /api、/scanner、/matcher，
   # 正好走同域反代，避免写死部署域名。SSR_* 用服务内网域名直连。
   front:
-    # upstream: ghcr.io/arthi-chaud/meelo-front:v3.13.1
-    image: registry.lazycat.cloud/wans/arthi-chaud/meelo-front:1068ff15c0ab811d
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-front:a6d25bd739340755
     depends_on: [server, scanner]
     environment:
       - NODE_ENV=production
@@ -62,13 +66,13 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+
   # ── 后端 API（NestJS + Prisma） ────────────────────────────────────
   # 应用文稿在容器里是 /lzcapp/documents/<部署者 UID>（平台不注入 UID 环境变量，binds 里的 @ 也不解析），
   # 所以 INTERNAL_DATA_DIR 用文稿根，并在 setup_script 里建稳定别名 /lzcapp/documents/music → <UID> 目录，
   # 曲库路径就能固定填 music；索引与封面按规范写 appvar，不写文稿目录。
   server:
-    # upstream: ghcr.io/arthi-chaud/meelo-server:v3.13.1
-    image: registry.lazycat.cloud/wans/arthi-chaud/meelo-server:ba6ffce3b5b2c2c6
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-server:ab3d4b2573fbd68f
     # 首次安装没有 settings.json，scanner/matcher 会直接退出并反复重启。
     # 启动前落一份上游样例配置（先写临时文件再 mv，避免并发读到半个文件）。
     setup_script: |
@@ -110,10 +114,10 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+
   # ── 曲库扫描器（Go） ───────────────────────────────────────────────
   scanner:
-    # upstream: ghcr.io/arthi-chaud/meelo-scanner:v3.13.1
-    image: registry.lazycat.cloud/wans/arthi-chaud/meelo-scanner:b58599856a1e5151
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-scanner:c03479e5845a1b16
     # 与 server 同一份 config 卷；这里再兜一次底，保证 worker 启动时设置文件一定在。
     setup_script: |
       mkdir -p /config
@@ -148,10 +152,10 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+
   # ── 元数据匹配器（消费 MQ 消息，补全艺人/专辑） ───────────────────────
   matcher:
-    # upstream: ghcr.io/arthi-chaud/meelo-matcher:v3.13.1
-    image: registry.lazycat.cloud/wans/arthi-chaud/meelo-matcher:dd1e7c8961025160
+    image: registry.lazycat.cloud/wans/arthichaud/meelo-matcher:9784b6b6cf335f5f
     # 与 server 同一份 config 卷，同样兜底设置文件。
     setup_script: |
       mkdir -p /config
@@ -184,6 +188,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+
   # ── 转码服务（上游 kyoo transcoder） ───────────────────────────────
   # 影像里是完整 Debian（有 bash/ffmpeg），但没有 wget/nc，用 bash 的 /dev/tcp 探端口。
   transcoder:
@@ -216,6 +221,7 @@ services:
       interval: 20s
       timeout: 10s
       retries: 6
+
   # ── 数据库 ─────────────────────────────────────────────────────────
   db:
     image: registry.lazycat.cloud/wans/library/postgres:544d804748ca9478
@@ -232,6 +238,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
   # ── 全文检索 ───────────────────────────────────────────────────────
   meili:
     image: registry.lazycat.cloud/wans/getmeili/meilisearch:d025d76e42cbb939
@@ -248,6 +255,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
   # ── 消息队列（扫描/匹配任务） ────────────────────────────────────────
   mq:
     image: registry.lazycat.cloud/wans/library/rabbitmq:4a24b44d3877617b
