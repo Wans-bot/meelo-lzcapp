@@ -4,66 +4,18 @@ project:
   root: .
   build_config: lzc-build.yml
   package_file: package.yml
-  output: dist/meelo.lpk
+  output: out/meelo.lpk
   target_arch: amd64
 
 update:
   strategy: publish
   allow_downgrade: false
-  version_source:
-    type: image
-    image: server
+
 build:
   run_buildscript: false
 
-images:
-  - id: server
-    target: service
-    service: server
-    source: ghcr.io/arthi-chaud/meelo-server
-    channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+$'
-    sort: semver
-    delivery:
-      mode: lazycat
-
-  - id: front
-    target: service
-    service: front
-    source: ghcr.io/arthi-chaud/meelo-front
-    channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+$'
-    sort: semver
-    delivery:
-      mode: lazycat
-
-  - id: scanner
-    target: service
-    service: scanner
-    source: ghcr.io/arthi-chaud/meelo-scanner
-    channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+$'
-    sort: semver
-    delivery:
-      mode: lazycat
-
-  - id: matcher
-    target: service
-    service: matcher
-    source: ghcr.io/arthi-chaud/meelo-matcher
-    channel: stable
-    tag_regex: '^v?\d+\.\d+\.\d+$'
-    sort: semver
-    delivery:
-      mode: lazycat
-
 stores:
   official:
-    enabled: true
-    skip_if_version_exists: true
-    create_if_missing: true
-    changelog_locales:
-      - zh
-      - en
+    enabled: false
   private:
     enabled: false
