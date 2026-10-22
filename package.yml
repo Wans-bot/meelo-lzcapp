@@ -1,0 +1,69 @@
+package: cloud.lazycat.app.meelo
+version: 3.13.1-14
+name: Meelo 音乐库
+description: 属于自己的个人音乐库：扫描本地曲库、读取内嵌标签与封面，支持分区检索与浏览器直接播放
+author: Arthur Jamet
+license: GPL-3.0
+homepage: https://github.com/Arthi-chaud/Meelo
+min_os_version: 1.5.0
+permissions:
+  required:
+    - net.internet
+    - document.private
+locales:
+  zh-CN:
+    name: Meelo 音乐库
+    description: 属于自己的个人音乐库：扫描本地曲库、读取内嵌标签与封面，支持分区检索与浏览器直接播放。
+    usage: |
+      Meelo 是一台属于你自己的音乐库服务器：把音乐文件放进微服的应用文稿，它会扫描曲库、
+      读取文件里的内嵌标签与封面，整理出歌曲、艺人、专辑，在浏览器里直接播放。
+
+      第一次使用：
+
+      1. 打开应用会自动登录（不需要手输账号密码），界面语言跟随浏览器（可切换简体中文）。
+      2. 放音乐：在懒猫「文件管理器」里找到「Meelo 音乐库」的应用文稿目录，把音乐文件
+         （mp3 / flac / ogg / opus / m4a / wav 等）放进去。
+      3. 建库：在应用内进入「设置 → 音乐库」，新建音乐库并把「路径」填成 `music`。
+         这个路径指向你的应用文稿目录：放在文稿里的音乐（含子目录、按专辑分文件夹）都会被扫描到。
+      4. 扫描入库：建库后执行一次「扫描」，扫描完成后出现歌曲、艺人、专辑与合辑；
+         封面与标签优先取文件内嵌信息，数量多时扫描需要一些时间，进度可在界面查看。
+      5. 播放：点任意歌曲即可播放；FLAC / MP3 / AAC 一般可直接播放，其他格式由内置转码服务
+         实时转换，浏览器兼容性更好。
+
+      审核账号（应用自身登录，正常情况下无需手输）：
+
+      - 账号：admin
+      - 密码：Meelo-Lzc-2026
+
+      说明：
+
+      - 曲库索引、封面、设置与账号数据保存在微服本机（应用数据目录），重启与升级不丢失；
+        音乐文件放在应用文稿里，卸载应用默认不会删除。
+      - 应用自身不内置、不分发任何音乐内容；曲目信息与封面取自你自己的音乐文件内嵌标签，
+        版权归原权利人，请仅用于你享有合法使用权的内容。
+      - 扫描全程在本机完成，不上传音乐文件；如需外部元数据补全，可在应用设置里自行开启
+        对应的公共数据源（会访问外网，只发送曲目标签信息）。
+  en-US:
+    name: Meelo
+    description: A music library of your own — scan local files, read embedded tags and artwork, browse your collection and play it in the browser.
+    usage: |
+      Meelo is a music library server of your own: drop audio files into the app documents folder and it scans the collection, reads the embedded tags and artwork, and organises tracks, artists and albums for playback in the browser.
+
+      First launch:
+
+      1. Opening the app signs you in automatically (no password to type); the UI follows the browser language and can be switched to Simplified Chinese.
+      2. Add music: put your audio files (mp3 / flac / ogg / opus / m4a / wav and more) into the app documents folder of "Meelo 音乐库" in the box file manager.
+      3. Create a library: open Settings → Libraries in the app and set the path to `music`. That path points at your app documents folder, so everything you drop in there (including per-album sub-folders) gets scanned.
+      4. Scan: run a scan once the library exists; tracks, artists, albums and compilations appear when it finishes. Tags and artwork come from the embedded metadata of your files; large collections take a while, and progress is visible in the UI.
+      5. Play: click any track. FLAC / MP3 / AAC usually play directly; other formats are transcoded on the fly by the bundled transcoder for better browser compatibility.
+
+      Review account (the app's own login; normally not needed):
+
+      - Username: admin
+      - Password: Meelo-Lzc-2026
+
+      Notes:
+
+      - Library index, artwork, settings and accounts live on your box in the app data folder and survive restarts and upgrades; music files are app documents and are not deleted when the app is uninstalled.
+      - The app ships and distributes no music content of its own; track details and artwork come from the embedded metadata of your own files and remain the property of their rights holders.
+      - Scanning happens entirely on your box and never uploads audio files; optional external metadata providers can be enabled in the app settings (they send track tags only).
