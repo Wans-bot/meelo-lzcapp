@@ -3,10 +3,6 @@ name: LazyCat LPK
 # 自动更新：定时检查上游新版本 → 改版本号 → 打包 → 发 Release（可选提交商店）。
 # 也可手动 workflow_dispatch，或推 v* tag 走 publish。
 on:
-  schedule:
-    # 每天 23 分（UTC）跑一次 auto：检查上游新版本 → 打包 → 发 Release。
-    # 错开分钟避免同一时刻占满 runner。
-    - cron: "23 4 * * *"
   push:
     tags:
       - "v*"
